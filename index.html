@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Incident Vector Clock System Demo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .region-card {
+            transition: all 0.3s ease;
+        }
+        .conflict-glow {
+            animation: glow 1.5s infinite alternate;
+        }
+        @keyframes glow {
+            from { box-shadow: 0 0 5px #ef4444; }
+            to { box-shadow: 0 0 20px #ef4444; }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen p-8 font-sans">
+    <div class="max-w-7xl mx-auto">
+        <header class="mb-8 text-center">
+            <h1 class="text-4xl font-extrabold text-slate-900 mb-2">Multi-Region Incident Management</h1>
+            <p class="text-slate-600 text-lg">Visualizing Distributed Causal Consistency with Vector Clocks</p>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <!-- US REGION -->
+            <div id="region-us" class="region-card bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200">
+                <div class="bg-blue-600 px-6 py-4 flex justify-between items-center text-white">
+                    <h2 class="text-xl font-bold">Region: US</h2>
+                    <span class="bg-blue-400 text-xs px-2 py-1 rounded-full">Port 8080</span>
+                </div>
+                <div class="p-6">
+                    <button onclick="createIncident('us')" class="w-full mb-6 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition">
+                        New Incident
+                    </button>
+                    <div id="incidents-us" class="space-y-4"></div>
+                </div>
+            </div>
+
+            <!-- EU REGION -->
+            <div id="region-eu" class="region-card bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200">
+                <div class="bg-emerald-600 px-6 py-4 flex justify-between items-center text-white">
+                    <h2 class="text-xl font-bold">Region: EU</h2>
+                    <span class="bg-emerald-400 text-xs px-2 py-1 rounded-full">Port 8081</span>
+                </div>
+                <div class="p-6">
+                    <button onclick="createIncident('eu')" class="w-full mb-6 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 px-4 rounded-lg transition">
+                        New Incident
+                    </button>
+                    <div id="incidents-eu" class="space-y-4"></div>
+                </div>
+            </div>
+
+            <!-- APAC REGION -->
+            <div id="region-apac" class="region-card bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200">
+                <div class="bg-amber-600 px-6 py-4 flex justify-between items-center text-white">
+                    <h2 class="text-xl font-bold">Region: APAC</h2>
+                    <span class="bg-amber-400 text-xs px-2 py-1 rounded-full">Port 8082</span>
+                </div>
+                <div class="p-6">
+                    <button onclick="createIncident('apac')" class="w-full mb-6 bg-amber-600 hover:bg-amber-700 text-white font-semibold py-2 px-4 rounded-lg transition">
+                        New Incident
+                    </button>
+                    <div id="incidents-apac" class="space-y-4"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-12 bg-slate-900 rounded-2xl p-8 text-white shadow-2xl">
+            <h2 class="text-2xl font-bold mb-4 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Simulation Controls
+            </h2>
+            <div class="flex flex-wrap gap-4">
+                <button onclick="simulatePartition()" class="bg-red-600 hover:bg-red-700 px-6 py-3 rounded-xl font-bold transition">
+                    Simulate US-EU Partition
+                </button>
+                <button onclick="healPartition()" class="bg-green-600 hover:bg-green-700 px-6 py-3 rounded-xl font-bold transition">
+                    Heal Network
+                </button>
+            </div>
+            <p class="mt-4 text-slate-400 italic">Partition disables replication between US and EU. APAC remains connected to both.</p>
+        </div>
+    </div>
+
+    <script>
+        const REGIONS = {
+            us: { port: 8080 },
+            eu: { port: 8081 },
+            apac: { port: 8082 }
+        };
+
+        async function fetchIncidents(regionId) {
+            const res = await fetch(`http://localhost:${REGIONS[regionId].port}/incidents`);
+            return await res.json();
+        }
+
+        async function createIncident(regionId) {
+            await fetch(`http://localhost:${REGIONS[regionId].port}/incidents`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: `Incident from ${regionId.toUpperCase()}`,
+                    description: 'System-generated test incident',
+                    severity: 'HIGH'
+                })
+            });
+            refreshAll();
+        }
+
+        async function updateIncident(regionId, incidentId, currentVC) {
+            await fetch(`http://localhost:${REGIONS[regionId].port}/incidents/${incidentId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    status: 'IN_PROGRESS',
+                    assigned_team: `Team ${regionId.toUpperCase()}`,
+                    vector_clock: currentVC
+                })
+            });
+            refreshAll();
+        }
+
+        async function resolveConflict(regionId, incidentId) {
+            await fetch(`http://localhost:${REGIONS[regionId].port}/incidents/${incidentId}/resolve`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    status: 'RESOLVED',
+                    assigned_team: 'Conflict Solved'
+                })
+            });
+            refreshAll();
+        }
+
+        async function simulatePartition() {
+            // US peer: delete EU
+            await fetch(`http://localhost:8080/config/urls`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ urls: ['http://region-apac:8082'] })
+            });
+            // EU peer: delete US
+            await fetch(`http://localhost:8081/config/urls`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ urls: ['http://region-apac:8082'] })
+            });
+            alert('Partition simulated: US and EU can no longer talk to each other directly.');
+        }
+
+        async function healPartition() {
+            await fetch(`http://localhost:8080/config/urls`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ urls: ['http://region-eu:8081', 'http://region-apac:8082'] })
+            });
+            await fetch(`http://localhost:8081/config/urls`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ urls: ['http://region-us:8080', 'http://region-apac:8082'] })
+            });
+            alert('Replication healed.');
+        }
+
+        async function refreshRegion(regionId) {
+            try {
+                const incidents = await fetchIncidents(regionId);
+                const container = document.getElementById(`incidents-${regionId}`);
+                container.innerHTML = incidents.map(inc => `
+                    <div class="p-4 rounded-xl border ${inc.version_conflict ? 'bg-red-50 border-red-200 conflict-glow' : 'bg-slate-50 border-slate-200'} transition-all">
+                        <div class="flex justify-between items-start mb-2">
+                            <h3 class="font-bold text-slate-800">${inc.title}</h3>
+                            <span class="text-xs font-mono bg-slate-200 px-2 py-1 rounded">${inc.status}</span>
+                        </div>
+                        <p class="text-xs text-slate-500 mb-3 font-mono">VC: ${JSON.stringify(inc.vector_clock)}</p>
+                        ${inc.version_conflict ? `
+                            <div class="mb-3 p-2 bg-red-100 text-red-700 text-xs font-bold rounded flex items-center gap-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                </svg>
+                                CONFLICT DETECTED
+                            </div>
+                            <button onclick="resolveConflict('${regionId}', '${inc.id}')" class="w-full bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-2 rounded transition">
+                                Resolve Conflict
+                            </button>
+                        ` : `
+                            <button onclick="updateIncident('${regionId}', '${inc.id}', ${JSON.stringify(inc.vector_clock).replace(/"/g, '&quot;')})" class="w-full bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold py-2 rounded transition">
+                                Update (Local)
+                            </button>
+                        `}
+                    </div>
+                `).join('');
+            } catch (e) {
+                document.getElementById(`incidents-${regionId}`).innerHTML = '<p class="text-red-500 text-xs">Region Offline</p>';
+            }
+        }
+
+        function refreshAll() {
+            refreshRegion('us');
+            refreshRegion('eu');
+            refreshRegion('apac');
+        }
+
+        setInterval(refreshAll, 1000);
+        refreshAll();
+    </script>
+</body>
+</html>
