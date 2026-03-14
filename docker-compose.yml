@@ -1,0 +1,116 @@
+version: '3.8'
+
+services:
+  db-us:
+    image: postgres:13
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=incidents_us
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d incidents_us"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  region-us:
+    build: .
+    environment:
+      - REGION_ID=us
+      - DB_HOST=db-us
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_NAME=incidents_us
+      - DB_PORT=5432
+      - PORT=8080
+      - PEER_URLS=http://region-eu:8081,http://region-apac:8082
+    ports:
+      - "8080:8080"
+    depends_on:
+      db-us:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  db-eu:
+    image: postgres:13
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=incidents_eu
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d incidents_eu"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  region-eu:
+    build: .
+    environment:
+      - REGION_ID=eu
+      - DB_HOST=db-eu
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_NAME=incidents_eu
+      - DB_PORT=5432
+      - PORT=8081
+      - PEER_URLS=http://region-us:8080,http://region-apac:8082
+    ports:
+      - "8081:8081"
+    depends_on:
+      db-eu:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  db-apac:
+    image: postgres:13
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=incidents_apac
+    ports:
+      - "5434:5432"
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d incidents_apac"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  region-apac:
+    build: .
+    environment:
+      - REGION_ID=apac
+      - DB_HOST=db-apac
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_NAME=incidents_apac
+      - DB_PORT=5432
+      - PORT=8082
+      - PEER_URLS=http://region-us:8080,http://region-eu:8081
+    ports:
+      - "8082:8082"
+    depends_on:
+      db-apac:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
